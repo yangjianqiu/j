@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>银鹭花生牛奶 - 幸运大转盘</title>
+  <!-- 引入Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- 引入Font Awesome图标 -->
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  
+  <!-- 自定义配置 -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            yinlu: {
+              red: '#D62828',    // 银鹭红色
+              yellow: '#FFB703', // 银鹭黄色
+              brown: '#8B4513',  // 花生棕色
+              light: '#FFF8E1'   // 浅色背景（纯色主背景）
+            }
+          },
+          fontFamily: {
+            sans: ['Arial', 'sans-serif'],
+          },
+        },
+      }
+    }
+  </script>
+  
+  <!-- 自定义工具类 -->
+  <style type="text/tailwindcss">
+    @layer utilities {
+      .content-auto {
+        content-visibility: auto;
+      }
+      .spin-transition {
+        transition: transform 6s cubic-bezier(0.17, 0.67, 0.13, 0.99);
+      }
+      .prize-shadow {
+        text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      }
+      .wheel-border {
+        box-shadow: 0 0 20px rgba(214, 40, 40, 0.5), inset 0 0 15px rgba(255, 183, 3, 0.6);
+      }
+    }
+  </style>
+  
+  <style>
+    /* 转盘扇形样式 - 优化扇形显示效果 */
+    .wheel-segment {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      clip-path: polygon(50% 50%, 50% 0%, calc(50% + 50% * sin(36deg * var(--n))) calc(50% - 50% * cos(36deg * var(--n))), calc(50% + 50% * sin(36deg * (var(--n) + 1))) calc(50% - 50% * cos(36deg * (var(--n) + 1))));
+      transform-origin: center;
+      transition: background-color 0.3s ease;
+    }
+    
+    /* 扇形hover效果（仅桌面端） */
+    @media (min-width: 768px) {
+      .wheel-segment:hover {
+        filter: brightness(1.1);
+      }
+    }
+    
+    /* 箭头样式 */
+    .arrow {
+      position: absolute;
+      top: -25px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0;
+      height: 0;
+      border-left: 20px solid transparent;
+      border-right: 20px solid transparent;
+      border-bottom: 30px solid #D62828;
+      z-index: 10;
+    }
+    
+    .arrow:after {
+      content: '';
+      position: absolute;
+      top: 5px;
+      left: -15px;
+      width: 0;
+      height: 0;
+      border-left: 15px solid transparent;
+      border-right: 15px solid transparent;
+      border-bottom: 22px solid white;
+    }
+    
+    /* 弹窗动画 */
+    .modal-enter {
+      animation: modalFadeIn 0.3s ease-out forwards;
+    }
+    
+    @keyframes modalFadeIn {
+      from { opacity: 0; transform: scale(0.9); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    
+    /* 奖品文字优化 - 确保清晰可见 */
+    .prize-text {
+      display: inline-block;
+      width: 100%;
+      text-align: center;
+      transform-origin: center;
+      font-weight: bold;
+      padding: 0 10px;
+    }
+  </style>
+</head>
+<body class="bg-yinlu-light min-h-screen font-sans relative overflow-x-hidden">
+  <!-- 顶部品牌区域 - 已移除头像 -->
+  <header class="bg-yinlu-red text-white py-4 px-6 shadow-md relative z-10">
+    <div class="container mx-auto flex flex-col md:flex-row items-center justify-between">
+      <div class="flex items-center mb-3 md:mb-0">
+        <div>
+          <h1 class="text-xl md:text-2xl font-bold">银鹭花生牛奶</h1>
+          <p class="text-sm opacity-90">花生香浓，幸运抽奖</p>
+        </div>
+      </div>
+      <div class="flex items-center">
+        <span class="mr-4 flex items-center">
+          <i class="fa fa-trophy text-yinlu-yellow mr-1"></i>
+          <span id="lottery-count">剩余抽奖次数: 3</span>
+        </span>
+        <button class="bg-yinlu-yellow text-yinlu-red px-3 py-1 rounded-full text-sm font-bold hover:bg-opacity-90 transition-colors">
+          活动规则
+        </button>
+      </div>
+    </div>
+  </header>
+  
+  <!-- 主内容区域 -->
+  <main class="container mx-auto px-4 py-8 md:py-16 relative">
+    <!-- 装饰元素 -->
+    <div class="absolute top-10 left-5 md:left-10 w-16 h-16 md:w-24 md:h-24 bg-yinlu-yellow rounded-full opacity-20 blur-sm"></div>
+    <div class="absolute bottom-10 right-5 md:right-10 w-20 h-20 md:w-28 md:h-28 bg-yinlu-red rounded-full opacity-10 blur-sm"></div>
+    
+    <div class="max-w-3xl mx-auto">
+      <!-- 活动标题 -->
+      <div class="text-center mb-8 md:mb-12">
+        <h2 class="text-[clamp(1.5rem,3vw,2.5rem)] font-bold text-yinlu-red mb-2">花生好礼 幸运转盘</h2>
+        <p class="text-gray-600 max-w-md mx-auto">香浓花生牛奶，丰厚奖品等你拿，100%中奖率！</p>
+      </div>
+      
+      <!-- 转盘容器 - 优化扇形显示 -->
+      <div class="relative w-full max-w-md mx-auto aspect-square mb-8">
+        <!-- 转盘外框 -->
+        <div class="absolute inset-0 bg-gradient-to-r from-yinlu-red to-yinlu-yellow rounded-full p-3 wheel-border"></div>
+        
+        <!-- 转盘本体 - 扇形图结构 -->
+        <div id="wheel" class="absolute inset-3 bg-white rounded-full spin-transition overflow-hidden">
+          <!-- 转盘扇形区域 - 谢谢惠顾（占4份）- 优化文字显示 -->
+          <div class="wheel-segment" style="--n:0; background-color: #FFE5B4; transform: rotate(0deg);">
+            <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 rotate(18deg) w-2/3">
+              <span class="prize-text text-yinlu-brown text-sm md:text-base prize-shadow">谢谢惠顾</span>
+            </div>
+          </div>
+          
+          <div class="wheel-segment" style="--n:1; background-color: #FFE5B4; transform: rotate(36deg);">
+            <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 rotate(54deg) w-2/3">
+              <span class="prize-text text-yinlu-brown text-sm md:text-base prize-shadow">谢谢惠顾</span>
+            </div>
+          </div>
+          
+          <div class="wheel-segment" style="--n:2; background-color: #FFE5B4; transform: rotate(72deg);">
+            <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 rotate(90deg) w-2/3">
+              <span class="prize-text text-yinlu-brown text-sm md:text-base prize-shadow">谢谢惠顾</span>
+            </div>
+          </div>
+          
+          <div class="wheel-segment" style="--n:3; background-color: #FFE5B4; transform: rotate(108deg);">
+            <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 rotate(126deg) w-2/3">
+              <span class="prize-text text-yinlu-brown text-sm md:text-base prize-shadow">谢谢惠顾</span>
+            </div>
+          </div>
+          
+          <!-- 满30减5代金券（占2份） -->
+          <div class="wheel-segment" style="--n:4; background-color: #FFB703; transform: rotate(144deg);">
+            <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 rotate(162deg) w-2/3">
+              <span class="prize-text text-white text-sm md:text-base prize-shadow">满30减5</span>
+            </div>
+          </div>
+          
+          <div class="wheel-segment" style="--n:5; background-color: #FFB703; transform: rotate(180deg);">
+            <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 rotate(198deg) w-2/3">
+              <span class="prize-text text-white text-sm md:text-base prize-shadow">满30减5</span>
+            </div>
+          </div>
+          
+          <!-- 再来一瓶（占2份） -->
+          <div class="wheel-segment" style="--n:6; background-color: #D62828; transform: rotate(216deg);">
+            <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 rotate(234deg) w-2/3">
+              <span class="prize-text text-white text-sm md:text-base prize-shadow">再来一瓶</span>
+            </div>
+          </div>
+          
+          <div class="wheel-segment" style="--n:7; background-color: #D62828; transform: rotate(252deg);">
+            <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 rotate(270deg) w-2/3">
+              <span class="prize-text text-white text-sm md:text-base prize-shadow">再来一瓶</span>
+            </div>
+          </div>
+          
+          <!-- 满50减10代金券（占1份） -->
+          <div class="wheel-segment" style="--n:8; background-color: #FB8500; transform: rotate(288deg);">
+            <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 rotate(306deg) w-2/3">
+              <span class="prize-text text-white text-sm md:text-base prize-shadow">满50减10</span>
+            </div>
+          </div>
+          
+          <!-- 满100减30代金券（占1份） -->
+          <div class="wheel-segment" style="--n:9; background-color: #219EBC; transform: rotate(324deg);">
+            <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 rotate(342deg) w-2/3">
+              <span class="prize-text text-white text-sm md:text-base prize-shadow">满100减30</span>
+            </div>
+          </div>
+          
+          <!-- 转盘中心 - 优化样式 -->
+          <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-16 h-16 md:w-20 md:h-20 bg-yinlu-red rounded-full flex items-center justify-center shadow-lg border-4 border-white z-10">
+            <div class="w-12 h-12 md:w-16 md:h-16 bg-yinlu-yellow rounded-full flex items-center justify-center cursor-pointer hover:scale-105 transition-transform">
+              <i class="fa fa-refresh text-white text-xl md:text-2xl"></i>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 指针箭头 -->
+        <div class="arrow"></div>
+      </div>
+      
+      <!-- 抽奖按钮 -->
+      <div class="text-center">
+        <button id="spin-btn" class="bg-gradient-to-r from-yinlu-red to-yinlu-yellow text-white font-bold py-3 px-8 rounded-full text-lg shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-yinlu-red focus:ring-opacity-50">
+          <i class="fa fa-gift mr-2"></i>立即抽奖
+        </button>
+        <p class="text-gray-600 text-sm mt-3">每人每天可抽奖3次，分享好友额外获得1次机会</p>
+      </div>
+      
+      <!-- 奖品展示区 -->
+      <div class="mt-12 md:mt-16">
+        <h3 class="text-xl font-bold text-yinlu-red text-center mb-6 flex items-center justify-center">
+          <i class="fa fa-pepper-hot text-yinlu-brown mr-2"></i>奖品设置
+        </h3>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div class="bg-white rounded-lg p-4 shadow-md hover:shadow-lg transition-shadow flex flex-col items-center text-center">
+            <div class="w-14 h-14 rounded-full bg-yinlu-red bg-opacity-10 flex items-center justify-center mb-3">
+              <i class="fa fa-ticket text-yinlu-red text-xl"></i>
+            </div>
+            <h4 class="font-bold text-yinlu-red">满30减5</h4>
+            <p class="text-sm text-gray-500 mt-1">购物代金券</p>
+          </div>
+          
+          <div class="bg-white rounded-lg p-4 shadow-md hover:shadow-lg transition-shadow flex flex-col items-center text-center">
+            <div class="w-14 h-14 rounded-full bg-yinlu-red bg-opacity-10 flex items-center justify-center mb-3">
+              <i class="fa fa-ticket text-yinlu-red text-xl"></i>
+            </div>
+            <h4 class="font-bold text-yinlu-red">满50减10</h4>
+            <p class="text-sm text-gray-500 mt-1">购物代金券</p>
+          </div>
+          
+          <div class="bg-white rounded-lg p-4 shadow-md hover:shadow-lg transition-shadow flex flex-col items-center text-center">
+            <div class="w-14 h-14 rounded-full bg-yinlu-red bg-opacity-10 flex items-center justify-center mb-3">
+              <i class="fa fa-ticket text-yinlu-red text-xl"></i>
+            </div>
+            <h4 class="font-bold text-yinlu-red">满100减30</h4>
+            <p class="text-sm text-gray-500 mt-1">购物代金券</p>
+          </div>
+          
+          <div class="bg-white rounded-lg p-4 shadow-md hover:shadow-lg transition-shadow flex flex-col items-center text-center">
+            <div class="w-14 h-14 rounded-full bg-yinlu-red bg-opacity-10 flex items-center justify-center mb-3">
+              <i class="fa fa-refresh text-yinlu-red text-xl"></i>
+            </div>
+            <h4 class="font-bold text-yinlu-red">再来一瓶</h4>
+            <p class="text-sm text-gray-500 mt-1">花生牛奶</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+  
+  <!-- 页脚 -->
+  <footer class="bg-gray-800 text-white py-6 mt-12">
+    <div class="container mx-auto px-4 text-center">
+      <p class="mb-2">© 2025 银鹭食品集团 版权所有</p>
+      <p class="text-sm opacity-70">活动最终解释权归银鹭食品集团所有</p>
+    </div>
+  </footer>
+  
+  <!-- 中奖结果弹窗 -->
+  <div id="result-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+    <div class="bg-white rounded-2xl max-w-md w-full mx-4 p-6 modal-enter">
+      <div class="text-center">
+        <div id="prize-icon" class="w-20 h-20 rounded-full bg-yinlu-yellow bg-opacity-20 flex items-center justify-center mx-auto mb-4">
+          <i class="fa fa-gift text-yinlu-yellow text-3xl"></i>
+        </div>
+        <h3 id="prize-title" class="text-2xl font-bold text-yinlu-red mb-2">恭喜中奖！</h3>
+        <p id="prize-desc" class="text-gray-600 mb-6 text-lg">您获得了 谢谢惠顾</p>
+        <div id="prize-code-container" class="mb-6 hidden">
+          <p class="text-sm text-gray-500 mb-2">兑换码</p>
+          <div class="bg-gray-100 py-2 px-4 rounded-lg font-mono text-yinlu-red font-bold">
+            <span id="prize-code">YINLU2025XXXX</span>
+          </div>
+        </div>
+        <button id="close-modal" class="bg-yinlu-red text-white font-bold py-2 px-8 rounded-full w-full hover:bg-opacity-90 transition-colors">
+          确认
+        </button>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    // 全局变量
+    let isSpinning = false;
+    let lotteryCount = 3;
+    const wheel = document.getElementById('wheel');
+    const spinBtn = document.getElementById('spin-btn');
+    const resultModal = document.getElementById('result-modal');
+    const closeModal = document.getElementById('close-modal');
+    const prizeTitle = document.getElementById('prize-title');
+    const prizeDesc = document.getElementById('prize-desc');
+    const prizeIcon = document.getElementById('prize-icon');
+    const prizeCodeContainer = document.getElementById('prize-code-container');
+    const prizeCode = document.getElementById('prize-code');
+    const lotteryCountEl = document.getElementById('lottery-count');
+    
+    // 奖品配置（角度范围对应转盘区域）
+    const prizes = [
+      { name: '谢谢惠顾', angleRange: [0, 144], color: '#D62828', icon: 'fa-smile-o', hasCode: false },
+      { name: '满30减5代金券', angleRange: [144, 216], color: '#FFB703', icon: 'fa-ticket', hasCode: true },
+      { name: '再来一瓶', angleRange: [216, 288], color: '#D62828', icon: 'fa-refresh', hasCode: false },
+      { name: '满50减10代金券', angleRange: [288, 324], color: '#FB8500', icon: 'fa-ticket', hasCode: true },
+      { name: '满100减30代金券', angleRange: [324, 360], color: '#219EBC', icon: 'fa-ticket', hasCode: true }
+    ];
+    
+    // 生成随机兑换码
+    function generateCode() {
+      const prefix = 'YINLU';
+      const year = new Date().getFullYear().toString().slice(-2);
+      const randomStr = Math.random().toString(36).substring(2, 6).toUpperCase();
+      return `${prefix}${year}${randomStr}`;
+    }
+    
+    // 抽奖逻辑
+    spinBtn.addEventListener('click', () => {
+      if (isSpinning) return;
+      if (lotteryCount <= 0) {
+        alert('您的抽奖次数已用完！分享好友可额外获得抽奖机会');
+        return;
+      }
+      
+      // 减少抽奖次数
+      lotteryCount--;
+      lotteryCountEl.textContent = `剩余抽奖次数: ${lotteryCount}`;
+      
+      // 开始旋转
+      isSpinning = true;
+      spinBtn.disabled = true;
+      spinBtn.classList.add('opacity-70', 'cursor-not-allowed');
+      
+      // 随机生成最终旋转角度（3-5圈 + 随机角度）
+      const randomDegree = 360 * (3 + Math.random() * 2) + Math.random() * 360;
+      
+      // 应用旋转
+      wheel.style.transform = `rotate(${randomDegree}deg)`;
+      
+      // 旋转结束后判断中奖结果
+      setTimeout(() => {
+        isSpinning = false;
+        spinBtn.disabled = false;
+        spinBtn.classList.remove('opacity-70', 'cursor-not-allowed');
+        
+        // 计算最终停留的角度（取模360度）
+        const finalDegree = randomDegree % 360;
+        
+        // 确定中奖奖品
+        let winningPrize = prizes[0]; // 默认谢谢惠顾
+        for (const prize of prizes) {
+          const [min, max] = prize.angleRange;
+          if (finalDegree >= min && finalDegree < max) {
+            winningPrize = prize;
+            break;
+          }
+        }
+        
+        // 显示中奖结果
+        showPrizeResult(winningPrize);
+      }, 6000);
+    });
+    
+    // 显示中奖结果弹窗
+    function showPrizeResult(prize) {
+      // 设置弹窗内容
+      if (prize.name === '谢谢惠顾') {
+        prizeTitle.textContent = '感谢参与';
+        prizeDesc.textContent = `您获得了 ${prize.name}`;
+        prizeCodeContainer.classList.add('hidden');
+      } else {
+        prizeTitle.textContent = '恭喜中奖！';
+        prizeDesc.textContent = `您获得了 ${prize.name}`;
+        
+        // 显示兑换码（如果有）
+        if (prize.hasCode) {
+          prizeCodeContainer.classList.remove('hidden');
+          prizeCode.textContent = generateCode();
+        } else {
+          prizeCodeContainer.classList.add('hidden');
+        }
+      }
+      
+      // 设置图标样式
+      prizeIcon.innerHTML = `<i class="fa ${prize.icon} text-${prize.color === '#D62828' ? 'yinlu-red' : prize.color === '#FFB703' ? 'yinlu-yellow' : prize.color === '#FB8500' ? 'orange-500' : 'sky-500'} text-3xl"></i>`;
+      prizeIcon.className = `w-20 h-20 rounded-full bg-${prize.color === '#D62828' ? 'yinlu-red' : prize.color === '#FFB703' ? 'yinlu-yellow' : prize.color === '#FB8500' ? 'orange-500' : 'sky-500'} bg-opacity-20 flex items-center justify-center mx-auto mb-4`;
+      
+      // 显示弹窗
+      resultModal.classList.remove('hidden');
+    }
+    
+    // 关闭弹窗
+    closeModal.addEventListener('click', () => {
+      resultModal.classList.add('hidden');
+    });
+    
+    // 点击弹窗背景关闭
+    resultModal.addEventListener('click', (e) => {
+      if (e.target === resultModal) {
+        resultModal.classList.add('hidden');
+      }
+    });
+    
+    // 初始化转盘位置（随机轻微旋转）
+    wheel.style.transform = `rotate(${Math.random() * 30}deg)`;
+  </script>
+</body>
+</html>
